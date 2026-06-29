@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,29 @@ import {
   startStepCounterUpdate,
   stopStepCounterUpdate,
 } from '@dongminyu/react-native-step-counter';
+import { syncSteps } from './src/api/steps';
 
 const DAILY_GOAL = 10000;
+const SYNC_INTERVAL = 30000;
 
 export default function App() {
   const [steps, setSteps] = useState<number>(0);
   const [supported, setSupported] = useState<boolean | null>(null);
+  const [synced, setSynced] = useState<boolean>(false);
+  const stepsRef = useRef<number>(0);
   
   useEffect(() => {
     requestPermissionAndStart();
+    
+    const interval = setInterval(async () => {
+      await syncSteps(stepsRef.current, DAILY_GOAL);
+      setSynced(true);
+      setTimeout(() => setSynced(false), 2000);
+    }, SYNC_INTERVAL);
+    
     return () => {
       stopStepCounterUpdate();
+      clearInterval(interval);
     };
   }, []);
   
@@ -40,11 +52,11 @@ export default function App() {
     if (ok) {
       startStepCounterUpdate(new Date(), (data: any) => {
         console.log('Step data:', JSON.stringify(data));
-        if (data && typeof data.numberOfSteps === 'number') {
-          setSteps(data.numberOfSteps);
-        } else if (data && typeof data.steps === 'number') {
-          setSteps(data.steps);
-        }
+        const count = typeof data.numberOfSteps === 'number'
+          ? data.numberOfSteps
+          : data.steps;
+        stepsRef.current = count;
+        setSteps(count);
       });
     }
   };
@@ -80,6 +92,8 @@ export default function App() {
       )}
       
       <Text style={styles.goal}>Goal: {DAILY_GOAL.toLocaleString()} steps</Text>
+      
+      {synced && <Text style={styles.synced}>Synced to server</Text>}
       
       {supported === false && (
         <Text style={styles.error}>Step counter not supported on this device</Text>
@@ -149,6 +163,11 @@ const styles = StyleSheet.create({
     color: '#475569',
     marginTop: 8,
     fontSize: 14,
+  },
+  synced: {
+    color: '#4ade80',
+    marginTop: 16,
+    fontSize: 13,
   },
   error: {
     color: '#f87171',
